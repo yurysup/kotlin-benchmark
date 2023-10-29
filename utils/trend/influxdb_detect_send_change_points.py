@@ -8,7 +8,7 @@ ORG = "tr"
 INFLUX_URL="http://localhost:8086"
 TOKEN = "TNB_q9VKKARIpJOneG6l3Hmqlncw_iMPf07LKAngJlXUVHDs63kRPwtMd7NqTXGENMG2dY1r7FHkkGLZC-6w9A=="
 MEASUREMENT = "benchmark"
-STAT_FILE = "benchmarks.csv"
+CP_MEASUREMENT = "change_points"
 
 client = influxdb_client.InfluxDBClient(
    url=INFLUX_URL,
@@ -28,16 +28,33 @@ query = f'from(bucket: "{BUCKET}")\
 
 result = query_api.query(org=ORG, query=query)
 change_points = {}
-timestamps = {}
 for table in result:
     values = []
-    timestamps_ = []
+    timestamps = []
     for record in table.records:
         values.append(record.values['_value'])
-        timestamps_.append(record.values['_time'])
-    change_points[table.records[0].values['label']] = energy_statistics.e_divisive(values, pvalue=0.01, permutations=100)
-    timestamps[table.records[0].values['label']] = timestamps_
-print(change_points)
+        timestamps.append(record.values['_time'])
+    cps = energy_statistics.e_divisive(values, pvalue=0.01, permutations=100)
+    record_key = (table.records[0].values['label'], table.records[0].values['env'])
+    change_points[record_key] = [timestamps[idx] for idx in cps]
+#print(change_points)
+
+
+def convert_point(raw_point:dict) -> influxdb_client.Point:
+    return (influxdb_client.Point(CP_MEASUREMENT)
+    .tag("label", raw_point['label'])
+    .tag("env", raw_point['env'])
+    .field("score", 1)
+    .time(raw_point['timestamp']))
+
+# batch write of change points to influxdb
+records = []
 for label, cps in change_points.items():
-    for index in cps:
-        print(timestamps[label][index])
+    raw_point = {}
+    raw_point['label'] = label[0]
+    raw_point['env'] = label[1]
+    for cp in cps:
+        raw_point['timestamp'] = cp
+        records.append(convert_point(raw_point))
+
+write_api.write(bucket=BUCKET, org=ORG, record=records)
