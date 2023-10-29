@@ -1,0 +1,1 @@
+Simple benchmark for Kotlin with trend tracking and change point detection.
