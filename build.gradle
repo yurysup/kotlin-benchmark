@@ -1,0 +1,63 @@
+plugins {
+    id 'java'
+    id 'org.jetbrains.kotlin.jvm' version "1.9.10"
+    id 'org.jetbrains.kotlin.plugin.allopen' version "1.9.0"
+    id 'org.jetbrains.kotlinx.benchmark' version "0.4.9"
+}
+
+
+// how to apply plugin to a specific source set?
+allOpen {
+    annotation("org.openjdk.jmh.annotations.State")
+}
+
+// Create a custom sourceSet
+sourceSets {
+    benchmarks
+}
+
+repositories {
+    maven { url 'https://maven.pkg.jetbrains.space/kotlin/p/kotlinx/maven' }
+    gradlePluginPortal()
+}
+
+sourceSets.all {
+    kotlin.srcDirs = ["$it.name/src"]
+    java.srcDirs = ["$it.name/src"]
+    resources.srcDirs = ["$it.name/resources"]
+}
+
+compileKotlin {
+    kotlinOptions.jvmTarget = "13"
+}
+compileTestKotlin {
+    kotlinOptions.jvmTarget = "13"
+}
+
+
+// Propagate dependencies from main sourceSet
+// You can add "+ sourceSets.test.output" to include test output as well
+dependencies {
+    implementation("org.jetbrains.kotlinx:kotlinx-benchmark-runtime:0.4.9")
+    benchmarksImplementation sourceSets.main.output + sourceSets.main.runtimeClasspath
+}
+
+// Configure benchmark
+benchmark {
+    // Setup configurations
+    configurations {
+        main { // main configuration is created automatically, but you can change its defaults
+            warmups = 1 // number of warmup iterations
+            iterations = 10 // number of iterations
+            iterationTime = 3 // time in seconds per iteration
+            reportFormat = "csv"
+        }
+    }
+    // Setup targets
+    targets {
+        // This one matches sourceSet name above
+        register("benchmarks") {
+            jmhVersion = "1.37"
+        }
+    }
+}
